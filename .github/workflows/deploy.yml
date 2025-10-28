@@ -161,42 +161,46 @@ jobs:
       - name: Upload artifact para download
         uses: actions/upload-artifact@v4
         with:
-          name: quiz-files
+          name: quiz-files-v${{ github.run_number }}
           path: dist/
           retention-days: 30
 
-      - name: Criar release com arquivos
-        if: github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v1
+      - name: Criar arquivo de instruções
+        run: |
+          cat > dist/INSTRUCOES.md << EOF
+          # 🎯 Quiz de Ciências da Computação
+          
+          ## 📁 Arquivos Incluídos
+          - \`index.html\` - Página principal do quiz
+          - \`styles.css\` - Estilos CSS responsivos
+          - \`script.js\` - Lógica JavaScript
+          - \`README.md\` - Documentação
+          - \`deploy-info.json\` - Informações do deploy
+          
+          ## 🚀 Como Usar
+          1. Baixe todos os arquivos desta pasta
+          2. Abra \`index.html\` em qualquer navegador
+          3. Divirta-se com o quiz!
+          
+          ## 📊 Validações Realizadas
+          - ✅ HTML validado com html-validate
+          - ✅ CSS validado com stylelint
+          - ✅ JavaScript validado com eslint
+          - ✅ Arquivos otimizados
+          
+          **Commit:** ${{ github.sha }}
+          **Branch:** ${{ github.ref_name }}
+          **Build:** v${{ github.run_number }}
+          EOF
+          
+          echo "✅ Arquivo de instruções criado"
+
+      - name: Upload artifact final
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: v${{ github.run_number }}
-          name: Quiz Release v${{ github.run_number }}
-          body: |
-            ## 🎯 Quiz de Ciências da Computação
-            
-            ### 📁 Arquivos Incluídos
-            - `index.html` - Página principal do quiz
-            - `styles.css` - Estilos CSS responsivos
-            - `script.js` - Lógica JavaScript
-            - `README.md` - Documentação
-            - `deploy-info.json` - Informações do deploy
-            
-            ### 🚀 Como Usar
-            1. Baixe os arquivos do release
-            2. Abra `index.html` em qualquer navegador
-            3. Divirta-se com o quiz!
-            
-            ### 📊 Validações Realizadas
-            - ✅ HTML validado com html-validate
-            - ✅ CSS validado com stylelint
-            - ✅ JavaScript validado com eslint
-            - ✅ Arquivos otimizados
-            
-            **Commit:** ${{ github.sha }}
-            **Branch:** ${{ github.ref_name }}
-          files: dist/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: quiz-completo-v${{ github.run_number }}
+          path: dist/
+          retention-days: 30
 
   # Job de notificação (opcional)
   notify:
@@ -209,9 +213,10 @@ jobs:
         run: |
           if [ "${{ needs.build-and-validate.result }}" == "success" ]; then
             echo "🎉 Build realizado com sucesso!"
-            echo "📁 Arquivos disponíveis como artifact"
-            echo "📦 Release criado automaticamente"
-            echo "🔗 Acesse a aba Releases para baixar os arquivos"
+            echo "📁 Arquivos disponíveis como artifacts"
+            echo "📦 Acesse a aba Actions para baixar os artifacts"
+            echo "🔗 Build v${{ github.run_number }} concluído"
+            echo "📋 Instruções incluídas no artifact"
           else
             echo "❌ Build falhou"
             exit 1
