@@ -1,4 +1,4 @@
-name: Deploy Quiz to GitHub Pages
+name: Quiz Build and Validation
 
 on:
   push:
@@ -7,217 +7,181 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
-
 jobs:
-  # Job de validação
+  # Job de validação básica
   validate:
-    name: Validar arquivos
+    name: Validar Arquivos
     runs-on: ubuntu-latest
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Validar HTML
+      - name: Verificar arquivos essenciais
         run: |
-          echo "🔍 Validando arquivos HTML..."
-          if [ -f "index.html" ]; then
-            echo "✅ index.html encontrado"
-            # Verificar se o HTML tem estrutura básica
-            if grep -q "<!DOCTYPE html>" index.html; then
-              echo "✅ DOCTYPE encontrado"
-            else
-              echo "❌ DOCTYPE não encontrado"
-              exit 1
-            fi
-          else
+          echo "🔍 Verificando arquivos essenciais..."
+          
+          # Verificar se os arquivos existem
+          if [ ! -f "index.html" ]; then
             echo "❌ index.html não encontrado"
             exit 1
           fi
-
-      - name: Validar CSS
-        run: |
-          echo "🎨 Validando arquivos CSS..."
-          if [ -f "styles.css" ]; then
-            echo "✅ styles.css encontrado"
-            # Verificar se tem estilos básicos
-            if grep -q "body" styles.css; then
-              echo "✅ Estilos básicos encontrados"
-            else
-              echo "❌ Estilos básicos não encontrados"
-              exit 1
-            fi
-          else
+          
+          if [ ! -f "styles.css" ]; then
             echo "❌ styles.css não encontrado"
             exit 1
           fi
-
-      - name: Validar JavaScript
-        run: |
-          echo "⚡ Validando arquivos JavaScript..."
-          if [ -f "script.js" ]; then
-            echo "✅ script.js encontrado"
-            # Verificar se tem estrutura básica do quiz
-            if grep -q "quizData" script.js; then
-              echo "✅ Dados do quiz encontrados"
-            else
-              echo "❌ Dados do quiz não encontrados"
-              exit 1
-            fi
-          else
+          
+          if [ ! -f "script.js" ]; then
             echo "❌ script.js não encontrado"
             exit 1
           fi
+          
+          echo "✅ Todos os arquivos essenciais encontrados"
 
-      - name: Verificar links
+      - name: Verificar estrutura HTML
         run: |
-          echo "🔗 Verificando links entre arquivos..."
-          # Verificar se HTML referencia CSS e JS
-          if grep -q "styles.css" index.html && grep -q "script.js" index.html; then
-            echo "✅ Links para CSS e JS encontrados"
-          else
-            echo "❌ Links para CSS ou JS não encontrados"
+          echo "🔍 Verificando estrutura HTML..."
+          
+          # Verificar DOCTYPE
+          if ! grep -q "<!DOCTYPE html>" index.html; then
+            echo "❌ DOCTYPE não encontrado"
             exit 1
           fi
+          
+          # Verificar links para CSS e JS
+          if ! grep -q "styles.css" index.html; then
+            echo "❌ Link para styles.css não encontrado"
+            exit 1
+          fi
+          
+          if ! grep -q "script.js" index.html; then
+            echo "❌ Link para script.js não encontrado"
+            exit 1
+          fi
+          
+          echo "✅ Estrutura HTML válida"
 
-  # Job de build e validação
-  build-and-validate:
-    name: Build e Validação
+      - name: Verificar estrutura JavaScript
+        run: |
+          echo "⚡ Verificando estrutura JavaScript..."
+          
+          # Verificar se tem dados do quiz
+          if ! grep -q "quizData" script.js; then
+            echo "❌ Dados do quiz não encontrados"
+            exit 1
+          fi
+          
+          # Verificar se tem funções principais
+          if ! grep -q "loadQuestion" script.js; then
+            echo "❌ Função loadQuestion não encontrada"
+            exit 1
+          fi
+          
+          echo "✅ Estrutura JavaScript válida"
+
+  # Job de build e preparação
+  build:
+    name: Build e Preparação
     runs-on: ubuntu-latest
     needs: validate
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Configurar Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-
-      - name: Instalar dependências de desenvolvimento
+      - name: Preparar arquivos
         run: |
-          echo "📦 Instalando ferramentas de validação..."
-          npm install -g html-validate
-          npm install -g stylelint
-          npm install -g eslint
-
-      - name: Validar HTML com html-validate
-        run: |
-          echo "🔍 Validando HTML com html-validate..."
-          html-validate index.html || echo "⚠️ Avisos de validação HTML (não críticos)"
-
-      - name: Validar CSS com stylelint
-        run: |
-          echo "🎨 Validando CSS com stylelint..."
-          stylelint styles.css || echo "⚠️ Avisos de validação CSS (não críticos)"
-
-      - name: Validar JavaScript com eslint
-        run: |
-          echo "⚡ Validando JavaScript com eslint..."
-          eslint script.js || echo "⚠️ Avisos de validação JavaScript (não críticos)"
-
-      - name: Otimizar arquivos
-        run: |
-          echo "⚡ Otimizando arquivos..."
-          # Minificar CSS (remover espaços desnecessários)
-          if command -v sed >/dev/null 2>&1; then
-            sed 's/  */ /g' styles.css | sed 's/; /;/g' | sed 's/ {/{/g' > styles.min.css
-            echo "✅ CSS otimizado"
-          fi
+          echo "📁 Preparando arquivos para distribuição..."
           
-          # Criar arquivo de versão
-          echo "v$(date +%Y%m%d-%H%M%S)" > version.txt
-          echo "✅ Arquivo de versão criado"
-
-      - name: Preparar arquivos para deploy
-        run: |
-          echo "📁 Preparando arquivos para deploy..."
+          # Criar diretório de distribuição
           mkdir -p dist
+          
+          # Copiar arquivos principais
           cp index.html dist/
           cp styles.css dist/
           cp script.js dist/
           cp README.md dist/
           
-          # Criar arquivo de informações do deploy
-          cat > dist/deploy-info.json << EOF
+          echo "✅ Arquivos copiados para dist/"
+
+      - name: Criar arquivo de informações
+        run: |
+          echo "📊 Criando arquivo de informações..."
+          
+          cat > dist/build-info.json << EOF
           {
-            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "build_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "commit": "${{ github.sha }}",
             "branch": "${{ github.ref_name }}",
             "workflow": "${{ github.workflow }}",
-            "runner": "${{ runner.os }}"
+            "build_number": "${{ github.run_number }}"
           }
           EOF
           
-          echo "✅ Arquivos preparados para deploy"
-
-      - name: Upload artifact para download
-        uses: actions/upload-artifact@v4
-        with:
-          name: quiz-files-v${{ github.run_number }}
-          path: dist/
-          retention-days: 30
+          echo "✅ Arquivo de informações criado"
 
       - name: Criar arquivo de instruções
         run: |
-          cat > dist/INSTRUCOES.md << EOF
+          echo "📋 Criando arquivo de instruções..."
+          
+          cat > dist/COMO-USAR.md << EOF
           # 🎯 Quiz de Ciências da Computação
           
           ## 📁 Arquivos Incluídos
           - \`index.html\` - Página principal do quiz
           - \`styles.css\` - Estilos CSS responsivos
           - \`script.js\` - Lógica JavaScript
-          - \`README.md\` - Documentação
-          - \`deploy-info.json\` - Informações do deploy
+          - \`README.md\` - Documentação completa
+          - \`build-info.json\` - Informações do build
           
           ## 🚀 Como Usar
           1. Baixe todos os arquivos desta pasta
           2. Abra \`index.html\` em qualquer navegador
-          3. Divirta-se com o quiz!
+          3. Responda às perguntas do quiz
+          4. Veja sua pontuação final!
           
-          ## 📊 Validações Realizadas
-          - ✅ HTML validado com html-validate
-          - ✅ CSS validado com stylelint
-          - ✅ JavaScript validado com eslint
-          - ✅ Arquivos otimizados
+          ## 🎮 Controles
+          - Clique nas opções para responder
+          - Use as teclas 1-4 para navegar pelas opções
+          - Pressione Enter para avançar
+          - Use "Jogar Novamente" para reiniciar
           
-          **Commit:** ${{ github.sha }}
-          **Branch:** ${{ github.ref_name }}
+          ## 📊 Sobre o Quiz
+          - 8 perguntas sobre Ciências da Computação
+          - Interface responsiva para desktop e mobile
+          - Sistema de pontuação com feedback visual
+          - Temas: Programação, Algoritmos, Redes, Estruturas de Dados
+          
           **Build:** v${{ github.run_number }}
+          **Commit:** ${{ github.sha }}
+          **Data:** $(date '+%d/%m/%Y %H:%M')
           EOF
           
           echo "✅ Arquivo de instruções criado"
 
-      - name: Upload artifact final
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: quiz-completo-v${{ github.run_number }}
+          name: quiz-ciencias-computacao-v${{ github.run_number }}
           path: dist/
           retention-days: 30
 
-  # Job de notificação (opcional)
+  # Job de notificação
   notify:
-    name: Notificar Build
+    name: Notificar Sucesso
     runs-on: ubuntu-latest
-    needs: build-and-validate
+    needs: [validate, build]
     if: always()
     steps:
-      - name: Status do Build
+      - name: Status Final
         run: |
-          if [ "${{ needs.build-and-validate.result }}" == "success" ]; then
-            echo "🎉 Build realizado com sucesso!"
-            echo "📁 Arquivos disponíveis como artifacts"
-            echo "📦 Acesse a aba Actions para baixar os artifacts"
-            echo "🔗 Build v${{ github.run_number }} concluído"
-            echo "📋 Instruções incluídas no artifact"
+          if [ "${{ needs.validate.result }}" == "success" ] && [ "${{ needs.build.result }}" == "success" ]; then
+            echo "🎉 Build concluído com sucesso!"
+            echo "📁 Arquivos disponíveis como artifact"
+            echo "📦 Nome do artifact: quiz-ciencias-computacao-v${{ github.run_number }}"
+            echo "🔗 Acesse a aba Actions para baixar"
+            echo "📋 Instruções incluídas no arquivo COMO-USAR.md"
           else
             echo "❌ Build falhou"
+            echo "🔍 Verifique os logs para mais detalhes"
             exit 1
           fi
