@@ -1,0 +1,182 @@
+name: Deploy Quiz to GitHub Pages
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # Job de validação
+  validate:
+    name: Validar arquivos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Validar HTML
+        run: |
+          echo "🔍 Validando arquivos HTML..."
+          if [ -f "index.html" ]; then
+            echo "✅ index.html encontrado"
+            # Verificar se o HTML tem estrutura básica
+            if grep -q "<!DOCTYPE html>" index.html; then
+              echo "✅ DOCTYPE encontrado"
+            else
+              echo "❌ DOCTYPE não encontrado"
+              exit 1
+            fi
+          else
+            echo "❌ index.html não encontrado"
+            exit 1
+          fi
+
+      - name: Validar CSS
+        run: |
+          echo "🎨 Validando arquivos CSS..."
+          if [ -f "styles.css" ]; then
+            echo "✅ styles.css encontrado"
+            # Verificar se tem estilos básicos
+            if grep -q "body" styles.css; then
+              echo "✅ Estilos básicos encontrados"
+            else
+              echo "❌ Estilos básicos não encontrados"
+              exit 1
+            fi
+          else
+            echo "❌ styles.css não encontrado"
+            exit 1
+          fi
+
+      - name: Validar JavaScript
+        run: |
+          echo "⚡ Validando arquivos JavaScript..."
+          if [ -f "script.js" ]; then
+            echo "✅ script.js encontrado"
+            # Verificar se tem estrutura básica do quiz
+            if grep -q "quizData" script.js; then
+              echo "✅ Dados do quiz encontrados"
+            else
+              echo "❌ Dados do quiz não encontrados"
+              exit 1
+            fi
+          else
+            echo "❌ script.js não encontrado"
+            exit 1
+          fi
+
+      - name: Verificar links
+        run: |
+          echo "🔗 Verificando links entre arquivos..."
+          # Verificar se HTML referencia CSS e JS
+          if grep -q "styles.css" index.html && grep -q "script.js" index.html; then
+            echo "✅ Links para CSS e JS encontrados"
+          else
+            echo "❌ Links para CSS ou JS não encontrados"
+            exit 1
+          fi
+
+  # Job de build e deploy
+  build-and-deploy:
+    name: Build e Deploy
+    runs-on: ubuntu-latest
+    needs: validate
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Instalar dependências de desenvolvimento
+        run: |
+          echo "📦 Instalando ferramentas de validação..."
+          npm install -g html-validate
+          npm install -g css-validate
+          npm install -g js-validate
+
+      - name: Validar HTML com html-validate
+        run: |
+          echo "🔍 Validando HTML com html-validate..."
+          html-validate index.html || echo "⚠️ Avisos de validação HTML (não críticos)"
+
+      - name: Otimizar arquivos
+        run: |
+          echo "⚡ Otimizando arquivos..."
+          # Minificar CSS (remover espaços desnecessários)
+          if command -v sed >/dev/null 2>&1; then
+            sed 's/  */ /g' styles.css | sed 's/; /;/g' | sed 's/ {/{/g' > styles.min.css
+            echo "✅ CSS otimizado"
+          fi
+          
+          # Criar arquivo de versão
+          echo "v$(date +%Y%m%d-%H%M%S)" > version.txt
+          echo "✅ Arquivo de versão criado"
+
+      - name: Preparar arquivos para deploy
+        run: |
+          echo "📁 Preparando arquivos para deploy..."
+          mkdir -p dist
+          cp index.html dist/
+          cp styles.css dist/
+          cp script.js dist/
+          cp README.md dist/
+          
+          # Criar arquivo de informações do deploy
+          cat > dist/deploy-info.json << EOF
+          {
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "commit": "${{ github.sha }}",
+            "branch": "${{ github.ref_name }}",
+            "workflow": "${{ github.workflow }}",
+            "runner": "${{ runner.os }}"
+          }
+          EOF
+          
+          echo "✅ Arquivos preparados para deploy"
+
+      - name: Configurar Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
+
+      - name: Deploy para GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # Job de notificação (opcional)
+  notify:
+    name: Notificar Deploy
+    runs-on: ubuntu-latest
+    needs: build-and-deploy
+    if: always()
+    steps:
+      - name: Status do Deploy
+        run: |
+          if [ "${{ needs.build-and-deploy.result }}" == "success" ]; then
+            echo "🎉 Deploy realizado com sucesso!"
+            echo "📱 Quiz disponível em: ${{ needs.build-and-deploy.outputs.page_url }}"
+          else
+            echo "❌ Deploy falhou"
+            exit 1
+          fi

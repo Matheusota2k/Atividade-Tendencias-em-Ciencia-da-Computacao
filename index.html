@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz de Ciências da Computação</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>💻 Quiz de Ciências da Computação</h1>
+            <p>Teste seus conhecimentos em programação e computação!</p>
+        </header>
+
+        <div class="quiz-container" id="quiz-container">
+            <div class="quiz-header">
+                <div class="progress-bar">
+                    <div class="progress" id="progress"></div>
+                </div>
+                <div class="question-counter">
+                    <span id="current-question">1</span> de <span id="total-questions">5</span>
+                </div>
+            </div>
+
+            <div class="question-container" id="question-container">
+                <h2 id="question-text">Carregando pergunta...</h2>
+                <div class="options-container" id="options-container">
+                    <!-- Opções serão inseridas via JavaScript -->
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="next-btn" class="btn btn-primary" disabled>Próxima</button>
+                <button id="restart-btn" class="btn btn-secondary" style="display: none;">Reiniciar Quiz</button>
+            </div>
+        </div>
+
+        <div class="results-container" id="results-container" style="display: none;">
+            <div class="results-content">
+                <h2>🎉 Quiz Concluído!</h2>
+                <div class="score-display">
+                    <div class="score-circle">
+                        <span id="final-score">0</span>
+                        <span class="score-total">/5</span>
+                    </div>
+                </div>
+                <p id="score-message">Parabéns!</p>
+                <div class="score-breakdown">
+                    <p>Acertos: <span id="correct-answers">0</span></p>
+                    <p>Erros: <span id="wrong-answers">0</span></p>
+                    <p>Porcentagem: <span id="percentage">0%</span></p>
+                </div>
+                <button id="play-again-btn" class="btn btn-primary">Jogar Novamente</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
