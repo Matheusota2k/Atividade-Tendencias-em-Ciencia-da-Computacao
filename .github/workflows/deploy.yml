@@ -108,13 +108,23 @@ jobs:
         run: |
           echo "📦 Instalando ferramentas de validação..."
           npm install -g html-validate
-          npm install -g css-validate
-          npm install -g js-validate
+          npm install -g stylelint
+          npm install -g eslint
 
       - name: Validar HTML com html-validate
         run: |
           echo "🔍 Validando HTML com html-validate..."
           html-validate index.html || echo "⚠️ Avisos de validação HTML (não críticos)"
+
+      - name: Validar CSS com stylelint
+        run: |
+          echo "🎨 Validando CSS com stylelint..."
+          stylelint styles.css || echo "⚠️ Avisos de validação CSS (não críticos)"
+
+      - name: Validar JavaScript com eslint
+        run: |
+          echo "⚡ Validando JavaScript com eslint..."
+          eslint script.js || echo "⚠️ Avisos de validação JavaScript (não críticos)"
 
       - name: Otimizar arquivos
         run: |
