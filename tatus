@@ -1,0 +1,3 @@
+[33m8148d61[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Adiciona arquivo teste.txt
+[33mab3b472[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m fix: simplificar pipeline GitHub Actions para funcionar corretamente
+[33m11c7d05[m fix: remover criaÃ§Ã£o automÃ¡tica de releases e focar em artifacts
