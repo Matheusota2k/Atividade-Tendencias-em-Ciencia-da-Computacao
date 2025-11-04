@@ -79,6 +79,196 @@ jobs:
           
           echo "✅ Estrutura JavaScript válida"
 
+  # Job de análise estática de segurança (SAST)
+  sast:
+    name: Análise Estática de Segurança (SAST)
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Inicializar CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+
+      - name: Autobuild CodeQL
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Executar análise CodeQL
+        uses: github/codeql-action/analyze@v3
+
+      - name: Verificar vulnerabilidades em JavaScript
+        run: |
+          echo "🔒 Verificando vulnerabilidades de segurança no código JavaScript..."
+          
+          # Verificar uso de eval() ou funções perigosas
+          if grep -r "eval(" script.js 2>/dev/null; then
+            echo "⚠️  ATENÇÃO: Uso de eval() detectado - pode ser um risco de segurança"
+          fi
+          
+          # Verificar innerHTML sem sanitização
+          if grep -r "innerHTML" script.js 2>/dev/null; then
+            echo "⚠️  ATENÇÃO: Uso de innerHTML detectado - verifique se há sanitização"
+          fi
+          
+          # Verificar console.log que podem expor informações sensíveis
+          if grep -r "console.log" script.js 2>/dev/null; then
+            echo "ℹ️  Console.log detectado - remova em produção se necessário"
+          fi
+          
+          echo "✅ Análise SAST concluída"
+
+      - name: Verificar segurança de headers HTML
+        run: |
+          echo "🔒 Verificando headers de segurança no HTML..."
+          
+          # Verificar se há meta tags de segurança
+          if ! grep -q "Content-Security-Policy" index.html 2>/dev/null; then
+            echo "ℹ️  Considere adicionar Content-Security-Policy meta tag"
+          fi
+          
+          # Verificar se há XSS protection
+          if ! grep -q "X-XSS-Protection" index.html 2>/dev/null; then
+            echo "ℹ️  Considere adicionar X-XSS-Protection meta tag"
+          fi
+          
+          echo "✅ Verificação de headers concluída"
+
+  # Job de análise dinâmica de segurança (DAST)
+  dast:
+    name: Análise Dinâmica de Segurança (DAST)
+    runs-on: ubuntu-latest
+    needs: [validate, build]
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Download artifact do build
+        uses: actions/download-artifact@v4
+        with:
+          pattern: quiz-ciencias-computacao-v*
+          merge-multiple: true
+
+      - name: Iniciar servidor web local
+        run: |
+          echo "🌐 Iniciando servidor web local para testes..."
+          
+          # Verificar estrutura do artifact baixado
+          ls -la
+          
+          # Instalar Python para servidor HTTP simples
+          sudo apt-get update
+          sudo apt-get install -y python3
+          
+          # Determinar diretório de trabalho (pode ser dist/ ou raiz dependendo do artifact)
+          if [ -d "dist" ]; then
+            WORK_DIR="dist"
+          else
+            WORK_DIR="."
+          fi
+          
+          echo "📁 Diretório de trabalho: $WORK_DIR"
+          
+          # Iniciar servidor em background na porta 8000
+          cd $WORK_DIR
+          python3 -m http.server 8000 > /tmp/server.log 2>&1 &
+          echo $! > /tmp/server.pid
+          
+          # Aguardar servidor iniciar
+          sleep 5
+          
+          # Verificar se servidor está rodando
+          if curl -f http://localhost:8000 > /dev/null 2>&1; then
+            echo "✅ Servidor web iniciado com sucesso na porta 8000"
+          else
+            echo "❌ Falha ao iniciar servidor web"
+            cat /tmp/server.log || true
+            exit 1
+          fi
+
+      - name: Executar OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.11.0
+        with:
+          target: 'http://localhost:8000'
+          fail_action: false
+          rules_file_name: '.zap/rules.tsv'
+          cmd_options: '-a'
+
+      - name: Verificar headers HTTP de segurança
+        run: |
+          echo "🔒 Verificando headers HTTP de segurança..."
+          
+          # Verificar headers importantes
+          HEADERS=$(curl -I http://localhost:8000 2>/dev/null)
+          
+          if echo "$HEADERS" | grep -q "X-Content-Type-Options"; then
+            echo "✅ X-Content-Type-Options configurado"
+          else
+            echo "⚠️  X-Content-Type-Options não encontrado"
+          fi
+          
+          if echo "$HEADERS" | grep -q "X-Frame-Options"; then
+            echo "✅ X-Frame-Options configurado"
+          else
+            echo "⚠️  X-Frame-Options não encontrado"
+          fi
+          
+          if echo "$HEADERS" | grep -q "Content-Security-Policy"; then
+            echo "✅ Content-Security-Policy configurado"
+          else
+            echo "⚠️  Content-Security-Policy não encontrado"
+          fi
+          
+          echo "✅ Verificação de headers HTTP concluída"
+
+      - name: Testar vulnerabilidades comuns
+        run: |
+          echo "🔒 Testando vulnerabilidades comuns..."
+          
+          # Testar se aplicação responde a métodos HTTP perigosos
+          echo "Testando métodos HTTP..."
+          if curl -X TRACE http://localhost:8000 -I 2>/dev/null | grep -q "200"; then
+            echo "⚠️  Método TRACE habilitado - considere desabilitar"
+          fi
+          
+          # Testar acesso a arquivos sensíveis
+          echo "Testando acesso a arquivos sensíveis..."
+          if curl -f http://localhost:8000/.git/config 2>/dev/null; then
+            echo "❌ CRÍTICO: Diretório .git acessível publicamente!"
+            exit 1
+          fi
+          
+          if curl -f http://localhost:8000/.env 2>/dev/null; then
+            echo "❌ CRÍTICO: Arquivo .env acessível publicamente!"
+            exit 1
+          fi
+          
+          echo "✅ Testes de vulnerabilidades concluídos"
+
+      - name: Parar servidor web
+        if: always()
+        run: |
+          echo "🛑 Parando servidor web..."
+          if [ -f /tmp/server.pid ]; then
+            SERVER_PID=$(cat /tmp/server.pid)
+            kill $SERVER_PID 2>/dev/null || true
+            rm /tmp/server.pid || true
+          fi
+          pkill -f "python3 -m http.server" || true
+          echo "✅ Servidor web parado"
+
+      - name: Upload relatório ZAP
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: |
+            zap_report.json
+            zap_report.html
+          retention-days: 30
+
   # Job de build e preparação
   build:
     name: Build e Preparação
@@ -169,19 +359,39 @@ jobs:
   notify:
     name: Notificar Sucesso
     runs-on: ubuntu-latest
-    needs: [validate, build]
+    needs: [validate, build, sast, dast]
     if: always()
     steps:
       - name: Status Final
         run: |
-          if [ "${{ needs.validate.result }}" == "success" ] && [ "${{ needs.build.result }}" == "success" ]; then
-            echo "🎉 Build concluído com sucesso!"
+          VALIDATE_STATUS="${{ needs.validate.result }}"
+          BUILD_STATUS="${{ needs.build.result }}"
+          SAST_STATUS="${{ needs.sast.result }}"
+          DAST_STATUS="${{ needs.dast.result }}"
+          
+          echo "📊 Status dos Jobs:"
+          echo "  ✅ Validação: $VALIDATE_STATUS"
+          echo "  ✅ Build: $BUILD_STATUS"
+          echo "  🔒 SAST: $SAST_STATUS"
+          echo "  🔒 DAST: $DAST_STATUS"
+          
+          if [ "$VALIDATE_STATUS" == "success" ] && [ "$BUILD_STATUS" == "success" ] && [ "$SAST_STATUS" == "success" ] && [ "$DAST_STATUS" == "success" ]; then
+            echo ""
+            echo "🎉 Pipeline concluído com sucesso!"
             echo "📁 Arquivos disponíveis como artifact"
             echo "📦 Nome do artifact: quiz-ciencias-computacao-v${{ github.run_number }}"
+            echo "🔒 Análises de segurança (SAST e DAST) concluídas"
             echo "🔗 Acesse a aba Actions para baixar"
             echo "📋 Instruções incluídas no arquivo COMO-USAR.md"
           else
-            echo "❌ Build falhou"
+            echo ""
+            echo "❌ Pipeline falhou ou teve avisos"
             echo "🔍 Verifique os logs para mais detalhes"
+            if [ "$SAST_STATUS" != "success" ]; then
+              echo "⚠️  SAST: Verifique os relatórios de segurança estática"
+            fi
+            if [ "$DAST_STATUS" != "success" ]; then
+              echo "⚠️  DAST: Verifique os relatórios de segurança dinâmica"
+            fi
             exit 1
           fi
